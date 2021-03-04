@@ -1,41 +1,43 @@
+// Exercise 4-5. Add access to library functions like sin, exp, and pow. See
+// <math.h> in Appendix B, Section 4.
+//
+// By Shawshary
+
 #include <ctype.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>  // for atof()
 #include <string.h>  // for strcmp()
+#include <math.h>  // for math functions
 
 #define MAXOP 100  // max size of operand or operator
 #define NUMBER '0'  // signal that a number was found
 #define FUNCTION 'f'  // signal that a function name was found
 #define MAXVAL 100  // maximum depth of val stack
-//#define BUFSIZE 100
-// Exercise 4-8. suppose that there will never be more than one character of
-// pushback. Modify `getch` and `ungetch` accordingly.
-#define BUFSIZE 1
+#define BUFSIZE 100
 
+// globals
 int sp = 0;  // next free stack position
 double val[MAXVAL];  // value stack
-
 char buf[BUFSIZE];  // buffer for ungetch
 int bufp = 0;  // next free position in buf
 
+// functions
 int getop(char []);
 void push(double);
 double pop(void);
-void print_stack_top(void);
-int duplicate_stack(double []);
-void swap_top_two(void);
-void clear_stack(void);
-
 int getch(void);
 void ungetch(int);
+void print_stack_top(void);
+void duplicate_top(void);
+void swap_top_two(void);
+void clear_stack(void);
+int proc_math_func(char []);
 
 // Reverse Polish Calculator
 int main() {
   int type;
   double op2;
   char s[MAXOP];
-  double recent_print_val;
 
   while ((type = getop(s)) != EOF) {
     switch (type) {
@@ -43,15 +45,7 @@ int main() {
         push(atof(s));
         break;
       case FUNCTION:
-        if (!strcmp(s, "sin"))
-          push(sin(pop()));
-        else if (!strcmp(s, "exp"))
-          push(exp(pop()));
-        else if (!strcmp(s, "pow")) {
-          op2 = pop();
-          push(pow(pop(), op2));
-        } else
-          printf("unknown function name: %s\n", s);
+        proc_math_func(s);
         break;
       case '+':
         push(pop() + pop());
@@ -77,10 +71,20 @@ int main() {
         else
           printf("error: zero modular\n");
         break;
+      case 'd':
+        duplicate_top();
+        break;
+      case '?':
+        print_stack_top();
+        break;
+      case 's':
+        swap_top_two();
+        break;
+      case 'c':
+        clear_stack();
+        break;
       case '\n':
-        // Exercise 4-6. Add a variable for the most recently printed value
-        recent_print_val = pop();
-        printf("\t%.8g\n", recent_print_val);
+        printf("\t%.8g\n", pop());
         break;
       default:
         printf("error: unknown command %s\n", s);
@@ -90,63 +94,50 @@ int main() {
   return 0;
 }
 
-// push: push f onto value stack
-void push(double f) {
-  if (sp < MAXVAL) {
-    val[sp++] = f;
-    //printf("value %g pushed\n", f);
-  }
-  else
-    printf("error: stack full, can't push %g\n", f);
-}
-
-// pop: pop and return top value from stack
-double pop(void) {
-  if (sp > 0) {
-    //printf("value %g poped\n", val[--sp]);
-    return val[--sp];
-  }
-  else {
-    printf("error: stack empty\n");
-    return 0.0;
-  }
-}
-
 // getop: get next character or numeric operand
 int getop(char s[]) {
   int i, c;
-
+  // skip whitespaces and tabs
   while ((s[0] = c = getch()) == ' ' || c == '\t')
     ;
-  //s[1] = '\0';  // why?
+  s[1] = '\0';  // why?
+  // not a positive or negative number, not a string,
+  // may be operators or newline char
   if (!isalpha(c) && !isdigit(c) && c != '.' && c != '-')
-    return c;  // not a number, may be operators or newline char
-  if (c == '-' && !isdigit(s[1] = getch()))
-    // minus operator `-`
     return c;
-  else if (c == '-')
+  if (c == '-' && !isdigit(s[1] = getch())) {
+    // minus operator `-`
+    ungetch(s[1]); // otherwise the `\n` right after `-` will be discarded
+    return c;
+  } else if (c == '-')
     // push back on input
     ungetch(s[1]);
 
   i = 0;
+
+  if (isalpha(c)) {
+    while(isalpha(s[++i] = c = getch()))
+      ;
+    s[i] = '\0';
+    if (c != EOF) ungetch(c);
+    if (i > 1)
+      return FUNCTION;
+    else
+      return s[0];
+  }
+
   if (isdigit(c) || c == '-')  // collect integer part
     // prefix ++, due to s[0] already hold one digit
     while (isdigit(s[++i] = c = getch()))
       ;
-  else if (isalpha(c))  // collect math function name
-    while (isalpha(s[++i] = c = getch()))
-      ;
-
   if (c == '.')  // collect fraction part
     while (isdigit(s[++i] = c = getch()))
       ;
   s[i] = '\0';  // replace the character which is not a part of number
-  if (c != EOF)
-    ungetch(c);
+
+  if (c != EOF) ungetch(c);
   if (s[0] == '-' || isdigit(s[0]))
     return NUMBER;
-  else if (isalpha(s[0]))
-    return FUNCTION;  // character string
   return -1;  // unexcept situation
 }
 
@@ -163,31 +154,37 @@ void ungetch(int c) {
     buf[bufp++] = c;
 }
 
-// Exercise 4-7. Write a routine `ungets(s)` that will push back an entire
-// string onto the input. Should `ungets` know about `buf` and `bufp`, or should
-// it just use `ungetch`?
-//
-// `ungets` doesn't need to know about `buf` and `bufp`, it just use `ungetch`
-// to do the push back operation.
-//
-// push back an entire string onto the input
-void ungets(char s[]) {
-  for (int i = strlen(s) - 1; i >= 0; i--) {
-    ungetch(s[i]);
+// push: push f onto value stack
+void push(double f) {
+  if (sp < MAXVAL) {
+    val[sp++] = f;
+    //printf("value %g pushed\n", f);
+  } else
+    printf("error: stack full, can't push %g\n", f);
+}
+
+// pop: pop and return top value from stack
+double pop(void) {
+  if (sp > 0) {
+    //printf("value %g poped\n", val[--sp]);
+    return val[--sp];
+  } else {
+    printf("error: stack empty\n");
+    return 0.0;
   }
 }
 
 // print the top elements of the stack
 void print_stack_top() {
-  printf("%f\n", val[sp - 1]);
+  if (sp > 0)
+    printf("stack top elements: %.8g\n", val[sp - 1]);  // do not change `sp`
+  else
+    printf("error: stack empty\n");
 }
 
 // duplicate the stack, return the next stack free position
-int duplicate_stack(double dup_stack[]) {
-  int i;
-  for (i = 0; i < sp; ++i)
-    dup_stack[i] = val[i];
-  return i;  // i = sp
+void duplicate_top(void) {
+  push(val[sp-1]);
 }
 
 // swap the top two elements
@@ -202,4 +199,22 @@ void swap_top_two() {
 // clear the stack
 void clear_stack() {
   sp = 0;
+}
+
+// return true if `s` is a function name in `math.h`
+int proc_math_func(char s[]) {
+  double op2;
+
+  if (!strcmp(s, "sin"))
+    push(sin(pop()));
+  else if (!strcmp(s, "exp"))
+    push(exp(pop()));
+  else if (!strcmp(s, "pow")) {
+    op2 = pop();
+    push(pow(pop(), op2));
+  } else {
+    printf("unknown function name: %s\n", s);
+    return 0;
+  }
+  return 1;
 }
