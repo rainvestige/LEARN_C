@@ -1,11 +1,17 @@
+#include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>  // for atof()
-#include <ctype.h>
+#include <string.h>  // for strcmp()
 
 #define MAXOP 100  // max size of operand or operator
 #define NUMBER '0'  // signal that a number was found
+#define FUNCTION 'f'  // signal that a function name was found
 #define MAXVAL 100  // maximum depth of val stack
-#define BUFSIZE 100
+//#define BUFSIZE 100
+// Exercise 4-8. suppose that there will never be more than one character of
+// pushback. Modify `getch` and `ungetch` accordingly.
+#define BUFSIZE 1
 
 int sp = 0;  // next free stack position
 double val[MAXVAL];  // value stack
@@ -29,11 +35,23 @@ int main() {
   int type;
   double op2;
   char s[MAXOP];
+  double recent_print_val;
 
   while ((type = getop(s)) != EOF) {
     switch (type) {
       case NUMBER:
         push(atof(s));
+        break;
+      case FUNCTION:
+        if (!strcmp(s, "sin"))
+          push(sin(pop()));
+        else if (!strcmp(s, "exp"))
+          push(exp(pop()));
+        else if (!strcmp(s, "pow")) {
+          op2 = pop();
+          push(pow(pop(), op2));
+        } else
+          printf("unknown function name: %s\n", s);
         break;
       case '+':
         push(pop() + pop());
@@ -60,7 +78,9 @@ int main() {
           printf("error: zero modular\n");
         break;
       case '\n':
-        printf("\t%.8g\n", pop());
+        // Exercise 4-6. Add a variable for the most recently printed value
+        recent_print_val = pop();
+        printf("\t%.8g\n", recent_print_val);
         break;
       default:
         printf("error: unknown command %s\n", s);
@@ -72,16 +92,20 @@ int main() {
 
 // push: push f onto value stack
 void push(double f) {
-  if (sp < MAXVAL)
+  if (sp < MAXVAL) {
     val[sp++] = f;
+    //printf("value %g pushed\n", f);
+  }
   else
     printf("error: stack full, can't push %g\n", f);
 }
 
 // pop: pop and return top value from stack
 double pop(void) {
-  if (sp > 0)
+  if (sp > 0) {
+    //printf("value %g poped\n", val[--sp]);
     return val[--sp];
+  }
   else {
     printf("error: stack empty\n");
     return 0.0;
@@ -92,15 +116,15 @@ double pop(void) {
 int getop(char s[]) {
   int i, c;
 
-  while ((s[0] = c = getch()) == ' ' || c == '\t' || c == '\n')
+  while ((s[0] = c = getch()) == ' ' || c == '\t')
     ;
-  s[1] = '\0';  // why?
-  if (!isdigit(c) && c != '.' && c != '-')
-    return c;  // not a number, may be operators
+  //s[1] = '\0';  // why?
+  if (!isalpha(c) && !isdigit(c) && c != '.' && c != '-')
+    return c;  // not a number, may be operators or newline char
   if (c == '-' && !isdigit(s[1] = getch()))
-    // binary operator `-`
+    // minus operator `-`
     return c;
-  else
+  else if (c == '-')
     // push back on input
     ungetch(s[1]);
 
@@ -109,13 +133,21 @@ int getop(char s[]) {
     // prefix ++, due to s[0] already hold one digit
     while (isdigit(s[++i] = c = getch()))
       ;
+  else if (isalpha(c))  // collect math function name
+    while (isalpha(s[++i] = c = getch()))
+      ;
+
   if (c == '.')  // collect fraction part
     while (isdigit(s[++i] = c = getch()))
       ;
   s[i] = '\0';  // replace the character which is not a part of number
   if (c != EOF)
     ungetch(c);
-  return NUMBER;
+  if (s[0] == '-' || isdigit(s[0]))
+    return NUMBER;
+  else if (isalpha(s[0]))
+    return FUNCTION;  // character string
+  return -1;  // unexcept situation
 }
 
 // getch: get a (possibly pushed-back) character
@@ -129,6 +161,20 @@ void ungetch(int c) {
     printf("ungetch: too many characters\n");
   else
     buf[bufp++] = c;
+}
+
+// Exercise 4-7. Write a routine `ungets(s)` that will push back an entire
+// string onto the input. Should `ungets` know about `buf` and `bufp`, or should
+// it just use `ungetch`?
+//
+// `ungets` doesn't need to know about `buf` and `bufp`, it just use `ungetch`
+// to do the push back operation.
+//
+// push back an entire string onto the input
+void ungets(char s[]) {
+  for (int i = strlen(s) - 1; i >= 0; i--) {
+    ungetch(s[i]);
+  }
 }
 
 // print the top elements of the stack
