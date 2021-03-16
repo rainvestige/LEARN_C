@@ -12,7 +12,7 @@
 
 #define MAXOP 100  // max size of operand or operator
 #define NUMBER '0'  // signal that a number was found
-#define FUNCTION 'f'  // signal that a function name was found
+#define FUNCTION '1'  // signal that a function name was found
 #define MAXVAL 100  // maximum depth of val stack
 #define BUFSIZE 1
 #define MAXVAR 26  // number of letter variables
