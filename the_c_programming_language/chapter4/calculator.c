@@ -179,7 +179,7 @@ void ungets(char s[]) {
 
 // print the top elements of the stack
 void print_stack_top() {
-  printf("%f\n", val[sp - 1]);
+  printf("%.8g\n", val[sp - 1]);
 }
 
 // duplicate the stack, return the next stack free position
